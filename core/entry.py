@@ -1,18 +1,40 @@
-from core.trend import ema
+def pullback_entry(candles, bias):
+    """
+    Structural M1 pullback entry.
+    Returns entry price or None.
+    """
+    if len(candles) < 20:
+        return None
 
-def pullback_entry(window, bias):
-    closes = [c["close"] for c in window]
-    ema20 = ema(closes, 20)[-1]
+    highs = [c["high"] for c in candles]
+    lows = [c["low"] for c in candles]
+    closes = [c["close"] for c in candles]
 
-    prev = window[-2]
-    curr = window[-1]
-
+    # -------------------------
+    # IDENTIFY IMPULSE LEG
+    # -------------------------
     if bias == "BUY":
-        if prev["close"] < ema20 and curr["close"] > ema20:
-            return curr["close"]
+        impulse_high = max(highs[:-5])
+        pullback_low = min(lows[-5:])
 
-    if bias == "SELL":
-        if prev["close"] > ema20 and curr["close"] < ema20:
-            return curr["close"]
+        # Must pull back but NOT break structure
+        if pullback_low < min(lows[:-10]):
+            return None
+
+        # Rejection candle
+        last = candles[-1]
+        if last["close"] > last["open"] and last["low"] == pullback_low:
+            return last["close"]
+
+    else:
+        impulse_low = min(lows[:-5])
+        pullback_high = max(highs[-5:])
+
+        if pullback_high > max(highs[:-10]):
+            return None
+
+        last = candles[-1]
+        if last["close"] < last["open"] and last["high"] == pullback_high:
+            return last["close"]
 
     return None
