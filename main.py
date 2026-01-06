@@ -10,6 +10,10 @@ from core.execution import place_market
 from risk.fixed_risk import calculate_lot
 from notifications.telegram import send
 
+
+# --------------------------------------------------
+# STARTUP
+# --------------------------------------------------
 connect(SYMBOL)
 
 send(
@@ -22,17 +26,31 @@ send(
 )
 
 last_h4_trade_time = None
+last_bias = None   # 🔑 CRITICAL STATE
 
+
+# --------------------------------------------------
+# MAIN LOOP
+# --------------------------------------------------
 while True:
     try:
+        # ------------------------------------------
+        # ONE TRADE AT A TIME
+        # ------------------------------------------
         if mt5.positions_get() or mt5.orders_get():
             time.sleep(15)
             continue
 
+        # ------------------------------------------
+        # SESSION FILTER
+        # ------------------------------------------
         if not session_allowed():
             time.sleep(30)
             continue
 
+        # ------------------------------------------
+        # LOAD CLOSED H4 + LIVE M1
+        # ------------------------------------------
         h4 = mt5.copy_rates_from_pos(SYMBOL, mt5.TIMEFRAME_H4, 1, 300)
         m1 = mt5.copy_rates_from_pos(SYMBOL, mt5.TIMEFRAME_M1, 0, 50)
 
@@ -40,26 +58,45 @@ while True:
             time.sleep(10)
             continue
 
+        # ------------------------------------------
+        # H4 TREND + STRENGTH
+        # ------------------------------------------
         bias, ok = h4_trend(list(h4))
         if not ok:
             time.sleep(10)
             continue
 
-        h4_time = h4[-1]["time"]
+        # 🔒 RESET FIRST-PULLBACK WHEN TREND FLIPS
+        if bias != last_bias:
+            last_h4_trade_time = None
+            last_bias = bias
+
+        # ------------------------------------------
+        # FIRST PULLBACK PER H4 CANDLE
+        # ------------------------------------------
+        h4_time = h4[-1]["time"]  # last CLOSED H4 candle
+
         if last_h4_trade_time == h4_time:
             time.sleep(10)
             continue
 
+        # ------------------------------------------
+        # ENTRY (M1)
+        # ------------------------------------------
         window = list(m1[-20:])
         entry = pullback_entry(window, bias)
         if not entry:
             time.sleep(10)
             continue
 
-        # 🔒 lock pullback immediately
+        # 🔒 LOCK THIS H4 CANDLE IMMEDIATELY
         last_h4_trade_time = h4_time
 
+        # ------------------------------------------
+        # SL / TP (STRUCTURAL)
+        # ------------------------------------------
         recent = window[-10:]
+
         if bias == "BUY":
             sl = min(c["low"] for c in recent)
             tp = entry + (entry - sl) * RR_TARGET
@@ -67,22 +104,32 @@ while True:
             sl = max(c["high"] for c in recent)
             tp = entry - (sl - entry) * RR_TARGET
 
+        # ------------------------------------------
+        # LOT SIZE
+        # ------------------------------------------
         lot = calculate_lot(SYMBOL, RISK_PER_TRADE_USD, entry, sl)
         if not lot:
             time.sleep(10)
             continue
 
+        # ------------------------------------------
+        # TELEGRAM ALERT
+        # ------------------------------------------
         send(
             f"📌 *MARKET ENTRY*\n"
             f"Symbol: {SYMBOL}\n"
-            f"Bias: {bias}\n"
+            f"Direction: {bias}\n"
             f"Entry: {entry}\n"
             f"SL: {sl}\n"
             f"TP: {tp}\n"
             f"RR: {RR_TARGET}"
         )
 
+        # ------------------------------------------
+        # EXECUTE
+        # ------------------------------------------
         result, error = place_market(SYMBOL, bias, lot, sl, tp)
+
         if result:
             send(f"✅ *TRADE OPENED*\nTicket: {result.order}")
         else:
