@@ -8,4 +8,6 @@ class CRTState:
         self.crt_time = None
         self.trades_taken = 0
         self.invalidated = False
+
         self.session = None
+        self.session_announced = False  # ✅ NEW

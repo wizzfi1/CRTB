@@ -1,23 +1,19 @@
 import MetaTrader5 as mt5
 
-
-def calculate_lot_size(symbol, risk_amount, entry, stop_loss):
+def calculate_lot(symbol, risk_usd, entry, sl):
     info = mt5.symbol_info(symbol)
-    if info is None:
+    if not info:
         return None
 
     tick_value = info.trade_tick_value
     tick_size = info.trade_tick_size
 
-    sl_distance = abs(entry - stop_loss)
-    if sl_distance == 0:
+    risk_per_lot = abs(entry - sl) / tick_size * tick_value
+    if risk_per_lot <= 0:
         return None
 
-    ticks = sl_distance / tick_size
-    loss_per_lot = ticks * tick_value
+    lot = risk_usd / risk_per_lot
+    lot = max(info.volume_min, min(lot, info.volume_max))
+    lot = round(lot / info.volume_step) * info.volume_step
 
-    lot = risk_amount / loss_per_lot
-
-    lot = max(info.volume_min, lot)
-    lot = min(info.volume_max, lot)
     return round(lot, 2)

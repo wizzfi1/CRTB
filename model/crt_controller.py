@@ -1,7 +1,7 @@
 import MetaTrader5 as mt5
 from model.state import CRTState
 from utils.session import in_trading_session, active_session_name
-from utils.telegram import TelegramNotifier
+from notifications.telegram import TelegramNotifier
 from config.settings import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
 
@@ -29,18 +29,29 @@ class CRTController:
             self._reset()
             self._initialize(candle)
 
-        # Session change alerts
-        session = active_session_name()
-        if session != self.state.session:
-            self.state.session = session
-            if session:
-                self.notifier.send(
-                    f"🕒 *{session} Session Open*\nEntries ENABLED"
-                )
-            else:
-                self.notifier.send(
-                    "⏹ *Sessions Closed*\nEntries DISABLED"
-                )
+        # --- SESSION CHANGE HANDLING (DEBOUNCED) ---
+        current_session = active_session_name()
+
+        # Session just opened
+        if current_session and not self.state.session_announced:
+            self.state.session = current_session
+            self.state.session_announced = True
+
+            self.notifier.send(
+                f"🕒 *{current_session} Session Open*\n"
+                f"Entries ENABLED"
+            )
+
+        # Session just closed
+        elif not current_session and self.state.session_announced:
+            self.state.session = None
+            self.state.session_announced = False
+
+            self.notifier.send(
+                "⏹ *Sessions Closed*\n"
+                "Entries DISABLED"
+            )
+
 
     def _initialize(self, candle):
         rng = candle["high"] - candle["low"]
