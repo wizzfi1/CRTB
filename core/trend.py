@@ -6,6 +6,8 @@ EMA_SLOW = 50
 EMA_REGIME = 200
 MIN_EMA_SEPARATION = 0.0003  # EURUSD tuned
 
+MIN_EMA_SEPARATION_H1 = 0.0001
+MIN_EMA_SEPARATION_H4 = 0.0003
 
 def ema(values, period):
     alpha = 2 / (period + 1)
@@ -71,3 +73,5 @@ def h4_trend(candles):
         return None, False
 
     return regime, True
+
+

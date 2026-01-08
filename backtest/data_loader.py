@@ -4,26 +4,60 @@ from datetime import datetime, timezone
 
 def load_history(symbol, timeframe, start, end, chunk_size=5000):
     """
-    Generic MT5 history loader for TF >= M5 (H4, H1, M15, etc).
-    Uses copy_rates_range safely.
+    Robust loader for TF >= M5 (H1, H4, etc).
+    Uses copy_rates_from_pos to avoid MT5 range bugs.
     """
+    all_rates = []
+    pos = 0
+
+    # Ensure UTC-aware
     if start.tzinfo is None:
         start = start.replace(tzinfo=timezone.utc)
     if end.tzinfo is None:
         end = end.replace(tzinfo=timezone.utc)
 
-    rates = mt5.copy_rates_range(symbol, timeframe, start, end)
+    while True:
+        chunk = mt5.copy_rates_from_pos(
+            symbol,
+            timeframe,
+            pos,
+            chunk_size
+        )
 
-    if rates is None or len(rates) == 0:
-        raise RuntimeError(f"No data returned for timeframe {timeframe}")
+        if chunk is None or len(chunk) == 0:
+            break
 
-    return list(rates)
+        all_rates.extend(chunk)
+        pos += chunk_size
+
+        last_time = datetime.fromtimestamp(
+            chunk[-1]["time"], tz=timezone.utc
+        )
+
+        # Stop once we've gone past requested start
+        if last_time < start:
+            break
+
+    filtered = [
+        r for r in all_rates
+        if start <= datetime.fromtimestamp(
+            r["time"], tz=timezone.utc
+        ) <= end
+    ]
+
+    filtered.sort(key=lambda x: x["time"])
+
+    if not filtered:
+        raise RuntimeError(
+            f"No data returned for TF={timeframe}"
+        )
+
+    return filtered
 
 
 def load_m1_history(symbol, start, end, chunk_size=50000):
     """
-    Force-load M1 history using positional chunks.
-    All timestamps are handled as UTC-aware datetimes.
+    Robust M1 loader (unchanged).
     """
     all_rates = []
     pos = 0
@@ -48,8 +82,7 @@ def load_m1_history(symbol, start, end, chunk_size=50000):
         pos += chunk_size
 
         last_time = datetime.fromtimestamp(
-            chunk[-1]["time"],
-            tz=timezone.utc
+            chunk[-1]["time"], tz=timezone.utc
         )
 
         if last_time < start:

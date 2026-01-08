@@ -1,19 +1,12 @@
 import MetaTrader5 as mt5
 from datetime import datetime
-from backtest.market_h4_m1_backtest import run_backtest
+
+from backtest.market_h1_m1_backtest import run_backtest
 
 
-def summarize(trades, risk_per_trade=2500):
+def summarize(trades, risk=2500):
     if not trades:
-        return {
-            "trades": 0,
-            "winrate": 0,
-            "pnl": 0,
-            "avg_win": 0,
-            "avg_loss": 0,
-            "max_drawdown": 0,
-            "max_drawdown_R": 0,
-        }
+        return {}
 
     equity = 0
     peak = 0
@@ -25,8 +18,7 @@ def summarize(trades, risk_per_trade=2500):
     for t in trades:
         equity += t
         peak = max(peak, equity)
-        dd = peak - equity
-        max_dd = max(max_dd, dd)
+        max_dd = max(max_dd, peak - equity)
 
         if t > 0:
             wins.append(t)
@@ -40,9 +32,8 @@ def summarize(trades, risk_per_trade=2500):
         "avg_win": round(sum(wins) / len(wins), 2) if wins else 0,
         "avg_loss": round(sum(losses) / len(losses), 2) if losses else 0,
         "max_drawdown": round(max_dd, 2),
-        "max_drawdown_R": round(max_dd / risk_per_trade, 2),
+        "max_drawdown_R": round(max_dd / risk, 2),
     }
-
 
 
 if __name__ == "__main__":
@@ -51,9 +42,9 @@ if __name__ == "__main__":
 
     trades = run_backtest(
         "EURUSDm",
-        datetime(2025, 12, 25),
-        datetime(2025, 12, 31),
+        datetime(2024, 11, 25),
+        datetime(2025, 1, 7),
     )
 
-    print("\n=== H4 → M1 MARKET BACKTEST ===")
+    print("\n=== H1 → M1 MARKET BACKTEST ===")
     print(summarize(trades))
